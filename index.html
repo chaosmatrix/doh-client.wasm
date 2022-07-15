@@ -1,0 +1,77 @@
+<html>
+<head>
+    <meta charset="utf-8">
+    <script src="wasm_exec.js"></script>
+    <script>
+        const go = new Go();
+        WebAssembly.instantiateStreaming(fetch("doh-client.wasm"), go.importObject).then((result) => {
+            go.run(result.instance);
+        });
+
+        async function asyncDohQuery(v_method, v_server, v_name, v_qtype, v_doh_format) {
+            try {
+                await AsyncDohQuery(v_method, v_server, v_name, v_qtype, v_doh_format)
+            } catch (err) {
+                console.error(err)
+            }
+        }
+
+        /*
+        this.addEventListener("keyup", function(e) {
+            e.preventDefault();
+            if (e.keyCode === 13) {
+                document.getElementById("b_send").click();
+            }
+        })
+        */
+    </script>
+</head>
+<body>
+    <style>
+        .inputc {
+            font-size: 16;
+        }
+
+        .output {
+            font-size: 16;
+            background: rgb(253, 255, 253);
+        }
+    </style>
+    <h2>Dns-Over-HTTPS</h2>
+    <div>
+    <select name="method" id="i_method" class="inputc">
+        <option value="GET">GET</option>
+        <option value="POST">POST</option>
+    </select>
+	<input id="i_server" type="url" class="inputc" value="https://1.1.1.1/dns-query" style="width: 300px;"/>
+	<input id="i_name" type="string" class="inputc" value="google.com"  style="width: 200px;"/>
+    <input id="i_qtype" type="string" class="inputc" list="qtype_list" value="A" style="width: 90px;" />
+    <datalist id="qtype_list">
+        <option>A</option>
+        <option>AAAA</option>
+        <option>CAA</option>
+        <option>CNAME</option>
+        <option>DS</option>
+        <option>HTTPS</option>
+        <option>MX</option>
+        <option>NAPTR</option>
+        <option>NS</option>
+        <option>PTR</option>
+        <option>SOA</option>
+        <option>SPF</option>
+        <option>SRV</option>
+        <option>TXT</option>
+    </datalist>
+    <select name="doh_format" id="i_doh_format" class="inputc">
+        <option value="JSON">JSON</option>
+        <option value="RFC8484">RFC8484</option>
+    </select>
+	<button id="b_send" class="inputc" onclick="asyncDohQuery(i_method.value, i_server.value, i_name.value, i_qtype.value, i_doh_format.value)">Send</button>
+</div>
+    <br>
+    <div class="output">
+        <p id="ans_doh" style="white-space: pre;"></p>
+    </div>
+    <br>
+</body>
+</html>
