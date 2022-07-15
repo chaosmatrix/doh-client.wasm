@@ -25,9 +25,9 @@ jobs:
           GOOS: js
           GOARCH: wasm
         run: |
-          go build -ldflags '-s -w' -o ${GITHUB_REPOSITORY##*/}.wasm
-          tar -zcf ./${GITHUB_REPOSITORY##*/}-${GITHUB_REF##*/}-${GOOS}-${GOARCH}.tar.gz ${GITHUB_REPOSITORY##*/}.wasm index.html wasm_exec.js
-          rm -f ${GITHUB_REPOSITORY##*/}.wasm
+          go build -ldflags '-s -w' -o ${GITHUB_REPOSITORY##*/}
+          tar -zcf ./${GITHUB_REPOSITORY##*/}-${GITHUB_REF##*/}-${GOOS}-${GOARCH}.tar.gz ${GITHUB_REPOSITORY##*/} index.html wasm_exec.js
+          rm -f ${GITHUB_REPOSITORY##*/}
           sha256sum ${GITHUB_REPOSITORY##*/}-${GITHUB_REF##*/}-${GOOS}-${GOARCH}.tar.gz >> ./${GITHUB_REPOSITORY##*/}-${GITHUB_REF##*/}.sha256sum
           bash ./.github/workflows/upload_asset.sh ./${GITHUB_REPOSITORY##*/}-${GITHUB_REF##*/}-${GOOS}-${GOARCH}.tar.gz $GITHUB_TOKEN
       - name: Upload checksum
