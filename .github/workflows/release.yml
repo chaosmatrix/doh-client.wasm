@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  CARGO_TERM_COLOR: always
+
+jobs:
+
+  linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Linux-Build-Upload
+        env:
+          CGO_ENABLED: 0
+          GOOS: js
+          GOARCH: wasm
+        run: |
+          go build -ldflags '-s -w' -o ${GITHUB_REPOSITORY##*/}.wasm
+          tar -zcf ./${GITHUB_REPOSITORY##*/}-${GITHUB_REF##*/}-${GOOS}-${GOARCH}.tar.gz ${GITHUB_REPOSITORY##*/}.wasm index.html wasm_exec.js
+          rm -f ${GITHUB_REPOSITORY##*/}.wasm
+          sha256sum ${GITHUB_REPOSITORY##*/}-${GITHUB_REF##*/}-${GOOS}-${GOARCH}.tar.gz >> ./${GITHUB_REPOSITORY##*/}-${GITHUB_REF##*/}.sha256sum
+          bash ./.github/workflows/upload_asset.sh ./${GITHUB_REPOSITORY##*/}-${GITHUB_REF##*/}-${GOOS}-${GOARCH}.tar.gz $GITHUB_TOKEN
+      - name: Upload checksum
+        run: |
+          bash ./.github/workflows/upload_asset.sh ./${GITHUB_REPOSITORY##*/}-${GITHUB_REF##*/}.sha256sum $GITHUB_TOKEN

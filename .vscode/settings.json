@@ -1,0 +1,22 @@
+{
+    "go.testEnvVars": {
+        "GOARCH": "wasm",
+        "GOOS": "js"
+    },
+    "go.toolsEnvVars": {
+        "GOARCH": "wasm",
+        "GOOS": "js"
+    },
+    "terminal.integrated.env.linux": {
+        "GOARCH": "wasm",
+        "GOOS": "js"
+    },
+    "terminal.integrated.env.osx": {
+        "GOARCH": "wasm",
+        "GOOS": "js"
+    },
+    "terminal.integrated.env.windows": {
+        "GOARCH": "wasm",
+        "GOOS": "js"
+    }
+}
