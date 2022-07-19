@@ -46,110 +46,132 @@ type DOHJson struct {
 	//Comment   string            `json:"Comment,omitempty"`            // optional
 }
 
-func generateDnsMsgBytes(name string, qtype string, qclass string) ([]byte, error) {
-	r := new(dns.Msg)
+type ReqForm struct {
+	server string
+	method string
+	name   string
+	qtype  string
+	qclass string
+	format string
+}
 
-	qname := dns.Fqdn(name)
-	qtypeInt := dns.StringToType[strings.ToUpper(qtype)]
-	qclassInt := dns.StringToClass[strings.ToUpper(qclass)]
+const (
+	DohFormatJson    = "JSON"
+	DohFormatRFC8484 = "RFC8484"
+)
+
+func (q ReqForm) queryJson() ([]byte, error) {
+
+	dohUrl := q.server + "?name=" + q.name + "&type=" + q.qtype
+	req, err := http.NewRequest(q.method, dohUrl, nil)
+	if err != nil {
+		return nil, fmt.Errorf("allocate new request failed, error: %s", err)
+	}
+
+	req.Header.Set("Accept", "application/dns-json")
+	if q.method == http.MethodPost {
+		req.Header.Set("Content-Type", "application/dns-json")
+	}
+
+	respBody, err := send(req)
+	if err != nil {
+		return nil, err
+	}
+
+	var respJson DOHJson
+	err = json.Unmarshal(respBody, &respJson)
+	if err != nil {
+		return nil, err
+	}
+	bs, err := json.MarshalIndent(respJson, "", "\t")
+	if err != nil {
+		return nil, err
+	}
+	return bs, nil
+}
+
+func (q ReqForm) queryRFC8484() ([]byte, error) {
+	r := new(dns.Msg)
 
 	r.Id = dns.Id()
 	r.RecursionDesired = true
 	r.Question = make([]dns.Question, 1)
 	r.Question[0] = dns.Question{
-		Name:   qname,
-		Qtype:  qtypeInt,
-		Qclass: qclassInt,
+		Name:   dns.Fqdn(q.name),
+		Qtype:  dns.StringToType[q.qtype],
+		Qclass: dns.StringToClass[q.qclass],
 	}
 
 	bmsg, err := r.Pack()
 	if err != nil {
 		return nil, err
 	}
-	return bmsg, err
-}
 
-func newRequest(method string, server string, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequest(method, server, body)
-
-	return req, err
-}
-
-func queryDohServer(method string, server string, name string, qtype string, qclass string, format string) (string, error) {
-
-	method = strings.ToUpper(method)
-	if method != http.MethodGet && method != http.MethodPost {
-		return "", fmt.Errorf("method %s not support", method)
-	}
-	name = dns.Fqdn(name)
-	qtype = strings.ToUpper(qtype)
-	url := server
+	dohUrl := q.server
 	var body io.Reader = nil
-
-	headers := make(map[string]string)
-	switch format {
-	case "JSON":
-		url = fmt.Sprintf("%s?name=%s&type=%s", server, name, qtype)
-		headers["Accept"] = "application/dns-json"
-		if method == http.MethodPost {
-			headers["Content-Type"] = "application/dns-json"
-		}
-	case "RFC8484":
-		headers["Accept"] = "application/dns-message"
-		bmsg, err := generateDnsMsgBytes(name, qtype, qclass)
-		if err != nil {
-			return "", err
-		}
-		if method == http.MethodGet {
-			url = fmt.Sprintf("%s?dns=%s", server, base64.RawURLEncoding.EncodeToString(bmsg))
-		} else {
-			body = bytes.NewReader(bmsg)
-			headers["Content-Type"] = "application/dns-message"
-		}
-	default:
-		return "", fmt.Errorf("doh format %s not support", format)
+	switch q.method {
+	case http.MethodGet:
+		dohUrl += "?dns=" + base64.RawURLEncoding.EncodeToString(bmsg)
+	case http.MethodPost:
+		body = bytes.NewReader(bmsg)
 	}
-	req, err := newRequest(method, url, body)
+
+	req, err := http.NewRequest(q.method, dohUrl, body)
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("allocate new request failed, error: %s", err)
 	}
 
-	for k, v := range headers {
-		req.Header.Set(k, v)
+	req.Header.Set("Accept", "application/dns-message")
+	if q.method == http.MethodPost {
+		req.Header.Set("Content-Type", "application/dns-message")
 	}
 
-	resp, err := query(req)
-
+	respBody, err := send(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	// parse
-	switch format {
-	case "JSON":
-		var dohJson DOHJson
-		err = json.Unmarshal(resp, &dohJson)
-		if err != nil {
-			return "", err
-		}
-		bs, err := json.MarshalIndent(dohJson, "", "\t")
-		if err != nil {
-			return "", err
-		}
-		return string(bs), nil
-	case "RFC8484":
-		rmsg := new(dns.Msg)
-		if err := rmsg.Unpack(resp); err != nil {
-			return "", err
-		}
-
-		return rmsg.String(), err
+	if err := r.Unpack(respBody); err != nil {
+		return nil, fmt.Errorf("server response invalid dns message, error: %s", err)
 	}
 
-	return "", err
+	return []byte(r.String()), err
 }
 
-func query(req *http.Request) ([]byte, error) {
+func (q *ReqForm) query() ([]byte, error) {
+	// pre-parse
+	q.method = strings.ToUpper(q.method)
+	q.name = dns.Fqdn(q.name)
+	q.qtype = strings.ToUpper(q.qtype)
+	q.qclass = strings.ToUpper(q.qclass)
+	q.format = strings.ToUpper(q.format)
+
+	// pre-check
+	if q.method != http.MethodGet && q.method != http.MethodPost {
+		return nil, fmt.Errorf("unsupport http method '%s'", q.method)
+	}
+	if _, found := dns.StringToType[q.qtype]; !found {
+		return nil, fmt.Errorf("unsupport type '%s'", q.qtype)
+	}
+	if _, found := dns.StringToClass[q.qclass]; !found {
+		return nil, fmt.Errorf("unsupport class '%s'", q.qclass)
+	}
+
+	var resp []byte
+	var err error
+	switch q.format {
+	case DohFormatJson:
+		resp, err = q.queryJson()
+	case DohFormatRFC8484:
+		resp, err = q.queryRFC8484()
+	default:
+		return nil, fmt.Errorf("unsupport DohFromat '%s'", q.format)
+	}
+
+	return resp, err
+}
+
+func send(req *http.Request) ([]byte, error) {
 	c := http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -221,9 +243,19 @@ func AsyncDohQuery() js.Func {
 
 			// in js, async/await make sure this code returen
 			go func() {
+
+				dohReqForm := &ReqForm{
+					server: v_server,
+					method: v_method,
+					name:   v_name,
+					qtype:  v_qtype,
+					qclass: "IN",
+					format: v_doh_format,
+				}
 				// if server response dosen't contain valid "access-control-allow-origin" to permit CORS
 				// error occur
-				resp, err := queryDohServer(v_method, v_server, v_name, v_qtype, "IN", v_doh_format)
+				respBytes, err := dohReqForm.query()
+				resp := string(respBytes)
 				if err != nil {
 					js.Global().Get("ans_doh").Set("innerHTML", fmt.Sprintf("Error: %s", err.Error()))
 					reject.Invoke(err.Error())
