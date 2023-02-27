@@ -8,6 +8,19 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   CARGO_TERM_COLOR: always
 
+### Copy From Github Pages Action
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+###
+
 jobs:
 
   linux:
@@ -27,9 +40,36 @@ jobs:
         run: |
           go build -ldflags '-s -w' -o ${GITHUB_REPOSITORY##*/}
           tar -zcf ./${GITHUB_REPOSITORY##*/}-${GITHUB_REF##*/}-${GOOS}-${GOARCH}.tar.gz ${GITHUB_REPOSITORY##*/} index.html wasm_exec.js
-          rm -f ${GITHUB_REPOSITORY##*/}
+          #rm -f ${GITHUB_REPOSITORY##*/}
           sha256sum ${GITHUB_REPOSITORY##*/}-${GITHUB_REF##*/}-${GOOS}-${GOARCH}.tar.gz >> ./${GITHUB_REPOSITORY##*/}-${GITHUB_REF##*/}.sha256sum
           bash ./.github/workflows/upload_asset.sh ./${GITHUB_REPOSITORY##*/}-${GITHUB_REF##*/}-${GOOS}-${GOARCH}.tar.gz $GITHUB_TOKEN
+          # github pages
+          mkdir ./github_pages
+          mv ${GITHUB_REPOSITORY##*/} index.html wasm_exec.js ./github_pages
       - name: Upload checksum
         run: |
           bash ./.github/workflows/upload_asset.sh ./${GITHUB_REPOSITORY##*/}-${GITHUB_REF##*/}.sha256sum $GITHUB_TOKEN
+  
+      - name: Setup Pages
+        env:
+          name: github-pages
+          url: ${{ steps.deployment.outputs.page_url }}
+        uses: actions/configure-pages@v3
+      - name: Upload artifact
+        env:
+          name: github-pages
+          url: ${{ steps.deployment.outputs.page_url }}
+        uses: actions/upload-pages-artifact@v1
+        with:
+          # Upload entire repository
+          path: './github_pages'
+      - name: Deploy to GitHub Pages
+        env:
+          name: github-pages
+          url: ${{ steps.deployment.outputs.page_url }}
+        id: deployment
+        uses: actions/deploy-pages@v1
+
+      - name: Clean
+        run: |
+          rm -rf ./
