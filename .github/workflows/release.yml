@@ -13,6 +13,10 @@ env:
 jobs:
 
   linux:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
     runs-on: ubuntu-latest
 
     steps:
@@ -40,22 +44,13 @@ jobs:
           bash ./.github/workflows/upload_asset.sh ./${GITHUB_REPOSITORY##*/}-${GITHUB_REF##*/}.sha256sum $GITHUB_TOKEN
   
       - name: Setup Pages
-        env:
-          name: github-pages
-          url: ${{ steps.deployment.outputs.page_url }}
         uses: actions/configure-pages@v3
       - name: Upload artifact
-        env:
-          name: github-pages
-          url: ${{ steps.deployment.outputs.page_url }}
         uses: actions/upload-pages-artifact@v1
         with:
           # Upload entire repository
           path: './github_pages'
       - name: Deploy to GitHub Pages
-        env:
-          name: github-pages
-          url: ${{ steps.deployment.outputs.page_url }}
         id: deployment
         uses: actions/deploy-pages@v1
 
